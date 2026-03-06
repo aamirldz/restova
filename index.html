@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restova — Admin Control Panel</title>
+    <meta name="description"
+        content="Restova: Advanced internal admin panel for managing Bilzora POS restaurants. Monitor, configure, and control all restaurant clients from one centralized dashboard.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <!-- ═══ LOGIN SCREEN ═══ -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-brand">
+                <div class="login-logo">
+                    <span class="logo-icon">◆</span>
+                    <span class="logo-text">RESTOVA</span>
+                </div>
+                <p class="login-subtitle">Admin Control Panel</p>
+                <p class="login-desc">Internal dashboard for managing Bilzora POS restaurants</p>
+            </div>
+            <div class="login-card">
+                <h2 class="login-title">Sign In</h2>
+                <div class="login-field">
+                    <label>Email or Username</label>
+                    <input type="text" id="loginUser" placeholder="admin@restova.com" autocomplete="username">
+                </div>
+                <div class="login-field">
+                    <label>Password</label>
+                    <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+                </div>
+                <button class="login-btn" id="loginBtn">Sign In →</button>
+                <p class="login-error" id="loginError"></p>
+                <p class="login-hint">Default: admin / admin123</p>
+            </div>
+            <p class="login-footer">Restova v1.0 · Bilzora Restaurant Operating System</p>
+        </div>
+    </div>
+
+    <!-- ═══ MAIN APP ═══ -->
+    <div id="app" style="display:none">
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-icon">◆</span>
+                <span class="brand-text">RESTOVA</span>
+                <span class="brand-badge">ADMIN</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">OVERVIEW</div>
+                <a class="nav-item active" data-screen="dashboard"><span class="nav-icon">📊</span><span
+                        class="nav-label">Dashboard</span></a>
+                <a class="nav-item" data-screen="restaurants"><span class="nav-icon">🏪</span><span
+                        class="nav-label">Restaurants</span></a>
+                <a class="nav-item" data-screen="subscriptions"><span class="nav-icon">💳</span><span
+                        class="nav-label">Subscriptions</span></a>
+                <a class="nav-item" data-screen="invoices"><span class="nav-icon">🧾</span><span
+                        class="nav-label">Invoices</span></a>
+                <div class="nav-section-label">OPERATIONS</div>
+                <a class="nav-item" data-screen="devices"><span class="nav-icon">📟</span><span
+                        class="nav-label">Devices</span></a>
+                <a class="nav-item" data-screen="sync"><span class="nav-icon">🔄</span><span class="nav-label">Command
+                        Center</span></a>
+                <a class="nav-item" data-screen="remote"><span class="nav-icon">🛠️</span><span class="nav-label">Remote
+                        Config</span></a>
+                <a class="nav-item" data-screen="integrations"><span class="nav-icon">🔗</span><span
+                        class="nav-label">Integrations</span></a>
+                <a class="nav-item" data-screen="updates"><span class="nav-icon">🚀</span><span class="nav-label">Update
+                        Deploy</span></a>
+                <div class="nav-section-label">BUSINESS</div>
+                <a class="nav-item" data-screen="crm"><span class="nav-icon">💎</span><span class="nav-label">CRM &
+                        Loyalty</span></a>
+                <a class="nav-item" data-screen="inventory"><span class="nav-icon">📦</span><span
+                        class="nav-label">Inventory</span></a>
+                <div class="nav-section-label">SUPPORT</div>
+                <a class="nav-item" data-screen="tickets"><span class="nav-icon">🎫</span><span
+                        class="nav-label">Support Tickets</span></a>
+                <a class="nav-item" data-screen="audit"><span class="nav-icon">📜</span><span class="nav-label">Audit
+                        Log</span></a>
+                <div class="nav-section-label">INTELLIGENCE</div>
+                <a class="nav-item" data-screen="analytics"><span class="nav-icon">🤖</span><span class="nav-label">AI
+                        Analytics</span></a>
+                <a class="nav-item" data-screen="users"><span class="nav-icon">👥</span><span class="nav-label">Team &
+                        Roles</span></a>
+                <a class="nav-item" data-screen="settings"><span class="nav-icon">⚙️</span><span
+                        class="nav-label">Settings</span></a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="user-avatar-sm" id="sidebarAvatar">SA</div>
+                    <div class="user-info-sm">
+                        <span class="user-name-sm" id="sidebarName">Super Admin</span>
+                        <span class="user-role-sm">admin@restova.com</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- TOPBAR -->
+            <header class="topbar">
+                <button class="topbar-toggle" id="sidebarToggle">☰</button>
+                <h1 class="topbar-title" id="pageTitle">Dashboard</h1>
+                <div class="topbar-right">
+                    <div class="topbar-search">
+                        <input type="text" id="globalSearch" placeholder="Search restaurants, orders, tickets...">
+                    </div>
+                    <div class="topbar-actions">
+                        <button class="topbar-btn" id="notifBtn" title="Notifications"><span>🔔</span><span
+                                class="notif-badge">3</span></button>
+                        <button class="topbar-btn" id="liveIndicator" title="Bilzora API"><span class="live-dot"></span>
+                            Live</button>
+                        <button class="topbar-btn" id="logoutBtn" title="Logout">🚪</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- SCREEN CONTAINER -->
+            <div class="screen-container" id="screenContainer">
+                <!-- Screens render here -->
+            </div>
+        </main>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script type="module" src="/main.js"></script>
+</body>
+
+</html>
