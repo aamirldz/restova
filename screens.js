@@ -267,11 +267,11 @@ function renderRestaurantDetail(state) {
   </div>
 
   ${tab === 'overview' ? `
-    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="kpi-card purple"><div class="kpi-header"><span class="kpi-label">Revenue</span></div><div class="kpi-value">${fmt(r.revenue)}</div></div>
-      <div class="kpi-card cyan"><div class="kpi-header"><span class="kpi-label">Orders</span></div><div class="kpi-value">${r.orders.toLocaleString()}</div></div>
-      <div class="kpi-card emerald"><div class="kpi-header"><span class="kpi-label">Avg Order</span></div><div class="kpi-value">${fmt(r.avgOrder)}</div></div>
-      <div class="kpi-card amber"><div class="kpi-header"><span class="kpi-label">Last Sync</span></div><div class="kpi-value" style="font-size:18px">${timeAgo(Date.now() - r.lastSync)}</div></div>
+    <div id="liveKpiContainer" class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi-card purple"><div class="kpi-header"><span class="kpi-label">Revenue</span></div><div class="kpi-value" id="kpiRevenue"><div class="spinner" style="width:20px;height:20px"></div></div></div>
+      <div class="kpi-card cyan"><div class="kpi-header"><span class="kpi-label">Orders</span></div><div class="kpi-value" id="kpiOrders"><div class="spinner" style="width:20px;height:20px"></div></div></div>
+      <div class="kpi-card emerald"><div class="kpi-header"><span class="kpi-label">Avg Order</span></div><div class="kpi-value" id="kpiAvgOrder"><div class="spinner" style="width:20px;height:20px"></div></div></div>
+      <div class="kpi-card amber"><div class="kpi-header"><span class="kpi-label">Last Sync</span></div><div class="kpi-value" style="font-size:18px" id="kpiLastSync"><div class="spinner" style="width:20px;height:20px"></div></div></div>
     </div>
     <div class="grid-2">
       <div class="panel">

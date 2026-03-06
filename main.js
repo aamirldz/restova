@@ -3,7 +3,7 @@
    Admin Control Panel for Bilzora POS
    ═══════════════════════════════════════════════════════════ */
 import { renderScreen } from './screens.js';
-import { RESTAURANTS, TICKETS, DEVICES, PLANS, ADMIN_USERS, VERSIONS, AUDIT_LOG, LIFECYCLE_STATES, INTEGRATIONS, INVOICES, addAuditEntry, formatCurrency } from './data.js';
+import { RESTAURANTS, TICKETS, DEVICES, PLANS, ADMIN_USERS, VERSIONS, AUDIT_LOG, LIFECYCLE_STATES, INTEGRATIONS, INVOICES, addAuditEntry, formatCurrency, timeAgo } from './data.js';
 
 // ── BILZORA API ──
 const BILZORA_API = 'https://bilzora.faizanldz07.workers.dev';
@@ -462,6 +462,32 @@ function bindEvents() {
                 }
             };
         });
+
+        // AUTO-FETCH: Load real KPIs from Bilzora API when detail overview opens
+        if (state._detailTab === 'overview' || !state._detailTab) {
+            (async () => {
+                try {
+                    const orders = await bilzoraAPI.getOrders(500);
+                    const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
+                    const totalOrders = orders.length;
+                    const avgOrder = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+                    const lastOrderTime = orders.length > 0 ? Math.max(...orders.map(o => o.time || 0)) : 0;
+                    const lastSyncAgo = lastOrderTime > 0 ? timeAgo(Date.now() - lastOrderTime) : 'No data';
+
+                    const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+                    el('kpiRevenue', formatCurrency(totalRevenue));
+                    el('kpiOrders', totalOrders.toLocaleString());
+                    el('kpiAvgOrder', formatCurrency(avgOrder));
+                    el('kpiLastSync', lastSyncAgo);
+
+                    // Also update the restaurant data for card view
+                    if (r) { r.revenue = totalRevenue; r.orders = totalOrders; r.avgOrder = avgOrder; r.lastSync = lastOrderTime || Date.now(); }
+                } catch (e) {
+                    const el = (id, val) => { const e2 = document.getElementById(id); if (e2) e2.textContent = val; };
+                    el('kpiRevenue', '—'); el('kpiOrders', '—'); el('kpiAvgOrder', '—'); el('kpiLastSync', 'Offline');
+                }
+            })();
+        }
 
         // Fetch live orders
         document.getElementById('fetchLiveOrders')?.addEventListener('click', async () => {
