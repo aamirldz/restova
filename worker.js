@@ -215,6 +215,61 @@ async function handleAPI(url, request, env) {
             }), { headers });
         }
 
+        // ══════════════════════════
+        // LICENSE CHECK (called by Bilzora POS on startup)
+        // ══════════════════════════
+        if (path === '/api/license-check' && method === 'GET') {
+            const restaurantId = url.searchParams.get('id');
+            if (!restaurantId) {
+                return new Response(JSON.stringify({ active: false, reason: 'No restaurant ID provided' }), { headers });
+            }
+
+            const row = await env.DB.prepare('SELECT data, status FROM restaurants WHERE id = ?').bind(restaurantId).first();
+            if (!row) {
+                return new Response(JSON.stringify({ active: false, reason: 'Restaurant not found in Restova' }), { headers });
+            }
+
+            const data = JSON.parse(row.data);
+            const status = data.status || row.status;
+
+            // Check if subscription has expired
+            const now = new Date();
+            const expiry = data.expiry ? new Date(data.expiry) : null;
+            const isExpired = expiry && expiry < now;
+
+            if (status === 'suspended') {
+                return new Response(JSON.stringify({
+                    active: false, reason: 'suspended',
+                    message: 'Your subscription has been suspended by Restova admin. Please contact support.',
+                    restaurantName: data.name, plan: data.plan
+                }), { headers });
+            }
+
+            if (status === 'inactive' || data.lifecycleStatus === 'churned') {
+                return new Response(JSON.stringify({
+                    active: false, reason: 'inactive',
+                    message: 'Your account has been deactivated. Please contact Restova support to reactivate.',
+                    restaurantName: data.name, plan: data.plan
+                }), { headers });
+            }
+
+            if (isExpired) {
+                return new Response(JSON.stringify({
+                    active: false, reason: 'expired',
+                    message: `Your ${data.plan || 'subscription'} plan expired on ${data.expiry}. Please renew to continue using Bilzora POS.`,
+                    restaurantName: data.name, plan: data.plan, expiry: data.expiry
+                }), { headers });
+            }
+
+            // Active
+            return new Response(JSON.stringify({
+                active: true, status,
+                restaurantName: data.name, plan: data.plan,
+                expiry: data.expiry,
+                daysRemaining: expiry ? Math.ceil((expiry - now) / 86400000) : null
+            }), { headers });
+        }
+
         return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
     } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
