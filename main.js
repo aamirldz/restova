@@ -390,8 +390,9 @@ function bindEvents() {
           <div><label class="modal-label">Owner</label><input class="input-field" id="erOwner" value="${r.owner}"></div>
           <div><label class="modal-label">City</label><input class="input-field" id="erCity" value="${r.city}"></div>
           <div><label class="modal-label">State</label><input class="input-field" id="erState" value="${r.state}"></div>
-          <div><label class="modal-label">Phone</label><input class="input-field" id="erPhone" value="${r.phone}"></div>
-          <div><label class="modal-label">Email</label><input class="input-field" id="erEmail" value="${r.email}"></div>
+          <div><label class="modal-label">Phone</label><input class="input-field" id="erPhone" value="${r.phone || ''}"></div>
+          <div><label class="modal-label">Email</label><input class="input-field" id="erEmail" value="${r.email || ''}"></div>
+          <div style="grid-column:span 2"><label class="modal-label">🔗 Bilzora POS API URL</label><input class="input-field" id="erApiUrl" value="${r.apiUrl || ''}" placeholder="https://bilzora-clientname.faizanldz07.workers.dev" style="font-family:var(--font-mono);font-size:12px"><div style="font-size:11px;color:var(--text-dim);margin-top:4px">Enter the deployed Bilzora POS URL for this restaurant to connect live data.</div></div>
         </div>
       `, [{ id: 'erCancel', label: 'Cancel', class: 'btn btn-secondary' }, { id: 'erSave', label: '💾 Save Changes', class: 'btn btn-primary' }]);
             document.getElementById('erCancel').onclick = closeModal;
@@ -402,6 +403,8 @@ function bindEvents() {
                 r.state = document.getElementById('erState')?.value || r.state;
                 r.phone = document.getElementById('erPhone')?.value || r.phone;
                 r.email = document.getElementById('erEmail')?.value || r.email;
+                r.apiUrl = document.getElementById('erApiUrl')?.value?.trim() || '';
+                updateInDB('restaurants', r.id, r);
                 closeModal(); render();
                 toast(`"${r.name}" updated successfully`, 'success');
             };
