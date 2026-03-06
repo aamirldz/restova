@@ -10,7 +10,9 @@ const BILZORA_API = 'https://bilzora.faizanldz07.workers.dev';
 
 // Create an API connector for a specific restaurant URL
 function getAPIFor(apiUrl) {
-    const base = apiUrl || BILZORA_API;
+    // Sanitize: trim whitespace, remove trailing slashes/dots
+    const raw = (apiUrl || BILZORA_API).trim().replace(/[./]+$/, '');
+    const base = raw || BILZORA_API;
     return {
         async getOrders(limit = 50) {
             try { const res = await fetch(`${base}/api/orders?limit=${limit}`); return res.json(); }
