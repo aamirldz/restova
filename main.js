@@ -8,7 +8,77 @@ import { RESTAURANTS, TICKETS, DEVICES, PLANS, ADMIN_USERS, VERSIONS, AUDIT_LOG,
 // ── BILZORA API ──
 const BILZORA_API = 'https://bilzora.faizanldz07.workers.dev';
 
-// ── APPLICATION STATE ──
+// ── RESTOVA D1 API (same-origin, served by this Worker) ──
+const restovaAPI = {
+    async get(endpoint) {
+        try { const r = await fetch(`/api/${endpoint}`); return r.json(); }
+        catch (e) { console.warn(`API GET ${endpoint} failed:`, e.message); return []; }
+    },
+    async post(endpoint, data) {
+        try {
+            const r = await fetch(`/api/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            return r.json();
+        } catch (e) { console.warn(`API POST ${endpoint} failed:`, e.message); return { error: e.message }; }
+    },
+    async put(endpoint, data) {
+        try {
+            const r = await fetch(`/api/${endpoint}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            return r.json();
+        } catch (e) { console.warn(`API PUT ${endpoint} failed:`, e.message); return { error: e.message }; }
+    },
+    async del(endpoint) {
+        try {
+            const r = await fetch(`/api/${endpoint}`, { method: 'DELETE' });
+            return r.json();
+        } catch (e) { console.warn(`API DELETE ${endpoint} failed:`, e.message); return { error: e.message }; }
+    }
+};
+
+// Load all persistent data from D1 database into in-memory arrays
+async function loadDataFromDB() {
+    try {
+        const [restaurants, devices, tickets, audit, invoices, users, integrations] = await Promise.all([
+            restovaAPI.get('restaurants'),
+            restovaAPI.get('devices'),
+            restovaAPI.get('tickets'),
+            restovaAPI.get('audit'),
+            restovaAPI.get('invoices'),
+            restovaAPI.get('users'),
+            restovaAPI.get('integrations'),
+        ]);
+
+        // Populate arrays (clear first, then fill)
+        if (Array.isArray(restaurants) && restaurants.length) { RESTAURANTS.length = 0; restaurants.forEach(r => RESTAURANTS.push(r)); }
+        if (Array.isArray(devices) && devices.length) { DEVICES.length = 0; devices.forEach(d => DEVICES.push(d)); }
+        if (Array.isArray(tickets) && tickets.length) { TICKETS.length = 0; tickets.forEach(t => TICKETS.push(t)); }
+        if (Array.isArray(audit) && audit.length) { AUDIT_LOG.length = 0; audit.forEach(a => AUDIT_LOG.push(a)); }
+        if (Array.isArray(invoices) && invoices.length) { INVOICES.length = 0; invoices.forEach(i => INVOICES.push(i)); }
+        if (Array.isArray(users) && users.length) { ADMIN_USERS.length = 0; users.forEach(u => ADMIN_USERS.push(u)); }
+        if (Array.isArray(integrations) && integrations.length) { INTEGRATIONS.length = 0; integrations.forEach(ig => INTEGRATIONS.push(ig)); }
+
+        console.log(`✅ Loaded from D1: ${RESTAURANTS.length} restaurants, ${DEVICES.length} devices, ${TICKETS.length} tickets, ${AUDIT_LOG.length} audit entries, ${ADMIN_USERS.length} users`);
+    } catch (e) {
+        console.warn('⚠️ Failed to load from D1, using local data:', e.message);
+    }
+}
+
+// Save entity to D1 (fire-and-forget, non-blocking)
+function saveToDB(endpoint, data) {
+    restovaAPI.post(endpoint, data).catch(e => console.warn('Save failed:', e));
+}
+function updateInDB(endpoint, id, data) {
+    restovaAPI.put(`${endpoint}/${id}`, data).catch(e => console.warn('Update failed:', e));
+}
+
+// Override addAuditEntry to also persist to D1
+const _origAddAudit = addAuditEntry;
+function persistAuditEntry(action, target, user = 'Super Admin', type = 'config') {
+    _origAddAudit(action, target, user, type);
+    // Also save to D1
+    const entry = AUDIT_LOG[0]; // latest entry just added
+    if (entry) saveToDB('audit', entry);
+}
+
 const state = {
     screen: 'dashboard',
     user: null,
@@ -302,7 +372,7 @@ function bindEvents() {
                 const st = document.getElementById('arState')?.value?.trim();
                 if (!name || !owner || !city || !st) { toast('Please fill all required fields', 'warning'); return; }
                 const newId = 'BLZ-' + String(RESTAURANTS.length + 1).padStart(3, '0');
-                RESTAURANTS.push({
+                const newRest = {
                     id: newId, name, city, state: st, owner,
                     phone: document.getElementById('arPhone')?.value || '', email: document.getElementById('arEmail')?.value || '',
                     plan: document.getElementById('arPlan')?.value || 'growth',
@@ -311,7 +381,9 @@ function bindEvents() {
                     revenue: 0, orders: 0, avgOrder: 0, since: new Date().toISOString().slice(0, 10),
                     expiry: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
                     logo: '🏪'
-                });
+                };
+                RESTAURANTS.push(newRest);
+                saveToDB('restaurants', newRest);
                 closeModal();
                 render();
                 toast(`Restaurant "${name}" added successfully as ${newId}`, 'success');
@@ -366,7 +438,9 @@ function bindEvents() {
                 r.status = action === 'suspend' ? 'suspended' : 'active';
                 if (action === 'activate') r.lifecycleStatus = 'active';
                 if (action === 'suspend') r.lifecycleStatus = 'grace_period';
-                AUDIT_LOG.unshift({ id: 'AUD-' + (AUDIT_LOG.length + 1), action: `Restaurant ${action}d`, target: `${r.name} (${r.id})`, user: 'Super Admin', type: 'subscription', time: Date.now(), ip: '103.42.156.78' });
+                const auditSuspend = { id: 'AUD-' + Date.now(), action: `Restaurant ${action}d`, target: `${r.name} (${r.id})`, user: 'Super Admin', type: 'subscription', time: Date.now(), ip: '103.42.156.78' };
+                AUDIT_LOG.unshift(auditSuspend); saveToDB('audit', auditSuspend);
+                updateInDB('restaurants', r.id, r);
                 closeModal(); render();
                 toast(`${r.name} has been ${action}d`, action === 'suspend' ? 'warning' : 'success');
             };
@@ -396,7 +470,9 @@ function bindEvents() {
                     r.lifecycleStatus = sel;
                     if (sel === 'churned' || sel === 'expired') r.status = 'suspended';
                     if (sel === 'active' || sel === 'renewed' || sel === 'won_back') r.status = 'active';
-                    AUDIT_LOG.unshift({ id: 'AUD-' + (AUDIT_LOG.length + 1), action: `Lifecycle changed to ${sel}`, target: `${r.name} (${r.id})`, user: 'Super Admin', type: 'subscription', time: Date.now(), ip: '103.42.156.78' });
+                    const auditLC = { id: 'AUD-' + Date.now(), action: `Lifecycle changed to ${sel}`, target: `${r.name} (${r.id})`, user: 'Super Admin', type: 'subscription', time: Date.now(), ip: '103.42.156.78' };
+                    AUDIT_LOG.unshift(auditLC); saveToDB('audit', auditLC);
+                    updateInDB('restaurants', r.id, r);
                     closeModal(); render();
                     toast(`${r.name} lifecycle → ${sel}`, 'success');
                 } else closeModal();
@@ -420,7 +496,9 @@ function bindEvents() {
                 if (name) {
                     const old = r.owner;
                     r.owner = name; if (email) r.email = email; if (phone) r.phone = phone;
-                    AUDIT_LOG.unshift({ id: 'AUD-' + (AUDIT_LOG.length + 1), action: `Ownership transferred`, target: `${r.name} (${r.id}) — ${old} → ${name}`, user: 'Super Admin', type: 'config', time: Date.now(), ip: '103.42.156.78' });
+                    const auditTransfer = { id: 'AUD-' + Date.now(), action: `Ownership transferred`, target: `${r.name} (${r.id}) — ${old} → ${name}`, user: 'Super Admin', type: 'config', time: Date.now(), ip: '103.42.156.78' };
+                    AUDIT_LOG.unshift(auditTransfer); saveToDB('audit', auditTransfer);
+                    updateInDB('restaurants', r.id, r);
                     closeModal(); render();
                     toast(`Ownership transferred to ${name}`, 'success');
                 }
@@ -448,7 +526,9 @@ function bindEvents() {
             document.getElementById('delCancel').onclick = closeModal;
             document.getElementById('delConfirm').onclick = () => {
                 r.status = 'inactive'; r.lifecycleStatus = 'churned';
-                AUDIT_LOG.unshift({ id: 'AUD-' + (AUDIT_LOG.length + 1), action: `Restaurant soft-deleted`, target: `${r.name} (${r.id})`, user: 'Super Admin', type: 'subscription', time: Date.now(), ip: '103.42.156.78' });
+                const auditDel = { id: 'AUD-' + Date.now(), action: `Restaurant soft-deleted`, target: `${r.name} (${r.id})`, user: 'Super Admin', type: 'subscription', time: Date.now(), ip: '103.42.156.78' };
+                AUDIT_LOG.unshift(auditDel); saveToDB('audit', auditDel);
+                updateInDB('restaurants', r.id, r);
                 closeModal(); navigate('restaurants');
                 toast(`${r.name} has been soft-deleted`, 'warning');
             };
@@ -703,15 +783,18 @@ function bindEvents() {
                 const name = document.getElementById('adName')?.value?.trim();
                 if (!name) { toast('Device name is required', 'warning'); return; }
                 const newId = 'DEV-' + String(DEVICES.length + 1).padStart(3, '0');
-                DEVICES.push({
+                const newDev = {
                     id: newId, restaurantId: r.id, restaurant: r.name,
                     type: document.getElementById('adType')?.value || 'POS',
                     name, version: VERSIONS[0].version,
                     lastSync: Date.now(), status: 'online',
                     os: document.getElementById('adOS')?.value || 'Windows 11',
                     ip: document.getElementById('adIP')?.value || '0.0.0.0'
-                });
+                };
+                DEVICES.push(newDev);
+                saveToDB('devices', newDev);
                 r.devices = (r.devices || 0) + 1;
+                updateInDB('restaurants', r.id, r);
                 closeModal(); render();
                 toast(`Device "${name}" added to ${r.name}`, 'success');
             };
@@ -902,7 +985,7 @@ function bindEvents() {
                     [{ id: 'rbCancel', label: 'Cancel', class: 'btn btn-secondary' }, { id: 'rbConfirm', label: '↩ Rollback', class: 'btn btn-danger' }]);
                 document.getElementById('rbCancel').onclick = closeModal;
                 document.getElementById('rbConfirm').onclick = () => {
-                    addAuditEntry(`Rollback initiated to v${ver}`, 'All restaurants', 'Super Admin', 'deployment');
+                    persistAuditEntry(`Rollback initiated to v${ver}`, 'All restaurants', 'Super Admin', 'deployment');
                     closeModal(); render();
                     toast(`Rollback to v${ver} initiated`, 'warning');
                 };
@@ -910,7 +993,7 @@ function bindEvents() {
         });
         // Advance pipeline
         document.querySelector('.promote-pipeline-btn')?.addEventListener('click', () => {
-            addAuditEntry('Pipeline advanced', 'v2.5.0-beta — next stage', 'Super Admin', 'deployment');
+            persistAuditEntry('Pipeline advanced', 'v2.5.0-beta — next stage', 'Super Admin', 'deployment');
             toast('Pipeline advanced to next stage', 'success');
             render();
         });
@@ -921,13 +1004,13 @@ function bindEvents() {
         document.querySelectorAll('.integration-enable-btn').forEach(btn => {
             btn.onclick = () => {
                 const ig = INTEGRATIONS.find(i => i.id === btn.dataset.id);
-                if (ig) { ig.status = 'active'; ig.health = 95; ig.connectedRestaurants = 3; addAuditEntry(`Integration enabled: ${ig.name}`, ig.name, 'Super Admin', 'config'); render(); toast(`${ig.name} enabled`, 'success'); }
+                if (ig) { ig.status = 'active'; ig.health = 95; ig.connectedRestaurants = 3; persistAuditEntry(`Integration enabled: ${ig.name}`, ig.name, 'Super Admin', 'config'); render(); toast(`${ig.name} enabled`, 'success'); }
             };
         });
         document.querySelectorAll('.integration-disable-btn').forEach(btn => {
             btn.onclick = () => {
                 const ig = INTEGRATIONS.find(i => i.id === btn.dataset.id);
-                if (ig) { ig.status = 'inactive'; ig.health = 0; addAuditEntry(`Integration disabled: ${ig.name}`, ig.name, 'Super Admin', 'config'); render(); toast(`${ig.name} disabled`, 'warning'); }
+                if (ig) { ig.status = 'inactive'; ig.health = 0; persistAuditEntry(`Integration disabled: ${ig.name}`, ig.name, 'Super Admin', 'config'); render(); toast(`${ig.name} disabled`, 'warning'); }
             };
         });
         document.querySelectorAll('.integration-config-btn').forEach(btn => {
@@ -946,7 +1029,7 @@ function bindEvents() {
     if (s === 'inventory') {
         document.querySelectorAll('.reorder-btn').forEach(btn => {
             btn.onclick = () => {
-                addAuditEntry(`Reorder initiated for ${btn.dataset.item}`, btn.dataset.item, 'Super Admin', 'config');
+                persistAuditEntry(`Reorder initiated for ${btn.dataset.item}`, btn.dataset.item, 'Super Admin', 'config');
                 toast(`Purchase order created for ${btn.dataset.item}`, 'success');
             };
         });
@@ -1062,12 +1145,14 @@ function bindEvents() {
                 const email = document.getElementById('atEmail')?.value?.trim();
                 if (!name || !email) { toast('Name and Email are required', 'warning'); return; }
                 const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-                ADMIN_USERS.push({
+                const newUser = {
                     id: 'USR-' + String(ADMIN_USERS.length + 1).padStart(3, '0'),
                     name, email, role: document.getElementById('atRole')?.value || 'support_agent',
                     status: 'active', lastLogin: Date.now(), region: document.getElementById('atRegion')?.value || '',
                     avatar: initials
-                });
+                };
+                ADMIN_USERS.push(newUser);
+                saveToDB('users', newUser);
                 closeModal(); render();
                 toast(`${name} added to team`, 'success');
             };
@@ -1180,7 +1265,10 @@ function initLogin() {
 }
 
 // ── APP START ──
-function startApp() {
+async function startApp() {
+    // Load persisted data from D1 before first render
+    await loadDataFromDB();
+
     // Sidebar navigation
     document.querySelectorAll('.nav-item').forEach(item => {
         item.onclick = (e) => { e.preventDefault(); navigate(item.dataset.screen); };
