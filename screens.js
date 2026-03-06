@@ -278,6 +278,10 @@ function renderRestaurantDetail(state) {
         <div class="panel-title" style="margin-bottom:14px">📋 Restaurant Info</div>
         ${infoRow('Owner', r.owner)}${infoRow('Phone', r.phone)}${infoRow('Email', r.email)}
         ${infoRow('City', r.city + ', ' + r.state)}${infoRow('Since', formatDate(new Date(r.since).getTime()))}
+        ${r.apiUrl ? `<div style="margin-top:10px;padding:10px;background:var(--bg-3);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">🔗 POS API URL</div>
+          <div style="font-family:var(--font-mono);font-size:11px;word-break:break-all;color:var(--brand-light)">${r.apiUrl}</div>
+        </div>` : '<div style="margin-top:10px;padding:8px;background:#FEF3C7;border-radius:6px;font-size:11px;color:#92400E">⚠️ No POS API URL configured. Edit restaurant to add one.</div>'}
       </div>
       <div class="panel">
         <div class="panel-title" style="margin-bottom:14px">💳 Subscription</div>

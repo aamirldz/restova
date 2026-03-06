@@ -5,8 +5,64 @@
 import { renderScreen } from './screens.js';
 import { RESTAURANTS, TICKETS, DEVICES, PLANS, ADMIN_USERS, VERSIONS, AUDIT_LOG, LIFECYCLE_STATES, INTEGRATIONS, INVOICES, addAuditEntry, formatCurrency, timeAgo } from './data.js';
 
-// ── BILZORA API ──
+// ── BILZORA API (dynamic per restaurant) ──
 const BILZORA_API = 'https://bilzora.faizanldz07.workers.dev';
+
+// Create an API connector for a specific restaurant URL
+function getAPIFor(apiUrl) {
+    const base = apiUrl || BILZORA_API;
+    return {
+        async getOrders(limit = 50) {
+            try { const res = await fetch(`${base}/api/orders?limit=${limit}`); return res.json(); }
+            catch (e) { console.warn('API getOrders failed:', e.message); return []; }
+        },
+        async getSettings() {
+            try { const res = await fetch(`${base}/api/settings`); return res.json(); }
+            catch (e) { return {}; }
+        },
+        async getCounter() {
+            try { const res = await fetch(`${base}/api/counter`); return res.json(); }
+            catch (e) { return { counter: 0 }; }
+        },
+        async getRunningOrders() {
+            try { const res = await fetch(`${base}/api/running`); return res.json(); }
+            catch (e) { return []; }
+        },
+        async updateSettings(data) {
+            try {
+                const res = await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                return res.json();
+            } catch (e) { return { error: e.message }; }
+        },
+        async testConnection() {
+            try { const res = await fetch(`${base}/api/counter`); const data = await res.json(); return { ok: true, counter: data.counter }; }
+            catch (e) { return { ok: false, error: e.message }; }
+        },
+        async getTables() {
+            try { const res = await fetch(`${base}/api/tables`); return res.json(); }
+            catch (e) { return []; }
+        },
+        async getStaff() {
+            try { const res = await fetch(`${base}/api/staff`); return res.json(); }
+            catch (e) { return []; }
+        },
+        async getKitchen() {
+            try { const res = await fetch(`${base}/api/kitchen`); return res.json(); }
+            catch (e) { return { stations: [], activeKOTs: 0, orders: [] }; }
+        },
+        async getHeartbeat() {
+            try { const res = await fetch(`${base}/api/heartbeat`); return res.json(); }
+            catch (e) { return { status: 'offline' }; }
+        },
+        async getDashboard() {
+            try { const res = await fetch(`${base}/api/dashboard`); return res.json(); }
+            catch (e) { return null; }
+        },
+    };
+}
+
+// Default connector (used for backward compatibility)
+const bilzoraAPI = getAPIFor(BILZORA_API);
 
 // ── RESTOVA D1 API (same-origin, served by this Worker) ──
 const restovaAPI = {
@@ -89,82 +145,6 @@ const state = {
     _liveData: null,
     _apiStatus: 'checking',
     _notifOpen: false,
-};
-
-// ── BILZORA API CONNECTOR ──
-const bilzoraAPI = {
-    async getOrders(limit = 50) {
-        try {
-            const res = await fetch(`${BILZORA_API}/api/orders?limit=${limit}`);
-            return res.json();
-        } catch (e) {
-            console.warn('API getOrders failed:', e.message);
-            return [];
-        }
-    },
-    async getSettings() {
-        try {
-            const res = await fetch(`${BILZORA_API}/api/settings`);
-            return res.json();
-        } catch (e) {
-            console.warn('API getSettings failed:', e.message);
-            return {};
-        }
-    },
-    async getCounter() {
-        const res = await fetch(`${BILZORA_API}/api/counter`);
-        return res.json();
-    },
-    async getRunningOrders() {
-        try {
-            const res = await fetch(`${BILZORA_API}/api/running`);
-            return res.json();
-        } catch (e) {
-            console.warn('API getRunningOrders failed:', e.message);
-            return [];
-        }
-    },
-    async updateSettings(data) {
-        try {
-            const res = await fetch(`${BILZORA_API}/api/settings`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            return res.json();
-        } catch (e) {
-            console.warn('API updateSettings failed:', e.message);
-            return { error: e.message };
-        }
-    },
-    async testConnection() {
-        try {
-            const res = await fetch(`${BILZORA_API}/api/counter`);
-            const data = await res.json();
-            return { ok: true, counter: data.counter };
-        } catch (e) {
-            return { ok: false, error: e.message };
-        }
-    },
-    async getTables() {
-        try { const res = await fetch(`${BILZORA_API}/api/tables`); return res.json(); }
-        catch (e) { return []; }
-    },
-    async getStaff() {
-        try { const res = await fetch(`${BILZORA_API}/api/staff`); return res.json(); }
-        catch (e) { return []; }
-    },
-    async getKitchen() {
-        try { const res = await fetch(`${BILZORA_API}/api/kitchen`); return res.json(); }
-        catch (e) { return { stations: [], activeKOTs: 0, orders: [] }; }
-    },
-    async getHeartbeat() {
-        try { const res = await fetch(`${BILZORA_API}/api/heartbeat`); return res.json(); }
-        catch (e) { return { status: 'offline' }; }
-    },
-    async getDashboard() {
-        try { const res = await fetch(`${BILZORA_API}/api/dashboard`); return res.json(); }
-        catch (e) { return null; }
-    },
 };
 
 // ── TOAST NOTIFICATIONS ──
@@ -361,6 +341,7 @@ function bindEvents() {
           <div><label class="modal-label">Email</label><input class="input-field" id="arEmail" placeholder="restaurant@email.com"></div>
           <div><label class="modal-label">Plan</label><select class="input-field" id="arPlan"><option value="starter">Starter (₹8,000/yr)</option><option value="growth" selected>Growth (₹18,000/yr)</option><option value="enterprise">Enterprise (₹36,000/yr)</option></select></div>
           <div><label class="modal-label">Outlets</label><input class="input-field" type="number" id="arOutlets" value="1" min="1"></div>
+          <div style="grid-column:span 2"><label class="modal-label">🔗 Bilzora POS API URL</label><input class="input-field" id="arApiUrl" placeholder="https://bilzora-clientname.faizanldz07.workers.dev" style="font-family:var(--font-mono);font-size:12px"><div style="font-size:11px;color:var(--text-dim);margin-top:4px">Enter the deployed Bilzora POS URL for this restaurant. This connects Restova to their POS data.</div></div>
         </div>
       `, [{ id: 'modalCancelBtn', label: 'Cancel', class: 'btn btn-secondary' }, { id: 'modalSaveBtn', label: '+ Add Restaurant', class: 'btn btn-primary' }]);
 
@@ -372,6 +353,7 @@ function bindEvents() {
                 const st = document.getElementById('arState')?.value?.trim();
                 if (!name || !owner || !city || !st) { toast('Please fill all required fields', 'warning'); return; }
                 const newId = 'BLZ-' + String(RESTAURANTS.length + 1).padStart(3, '0');
+                const apiUrl = document.getElementById('arApiUrl')?.value?.trim() || '';
                 const newRest = {
                     id: newId, name, city, state: st, owner,
                     phone: document.getElementById('arPhone')?.value || '', email: document.getElementById('arEmail')?.value || '',
@@ -380,7 +362,7 @@ function bindEvents() {
                     devices: 0, posVersion: '2.4.1', lastSync: Date.now(),
                     revenue: 0, orders: 0, avgOrder: 0, since: new Date().toISOString().slice(0, 10),
                     expiry: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
-                    logo: '🏪'
+                    logo: '🏪', apiUrl
                 };
                 RESTAURANTS.push(newRest);
                 saveToDB('restaurants', newRest);
@@ -564,23 +546,25 @@ function bindEvents() {
         });
 
         // AUTO-FETCH: Load real KPIs from Bilzora API when detail overview opens
+        // Use the restaurant's own API URL if available
         if (state._detailTab === 'overview' || !state._detailTab) {
+            const posAPI = getAPIFor(r?.apiUrl);
             (async () => {
                 try {
-                    // Fetch everything in parallel
+                    // Fetch everything in parallel using this restaurant's API
                     const [dashboard, tables, staff, kitchen, heartbeat] = await Promise.all([
-                        bilzoraAPI.getDashboard(),
-                        bilzoraAPI.getTables(),
-                        bilzoraAPI.getStaff(),
-                        bilzoraAPI.getKitchen(),
-                        bilzoraAPI.getHeartbeat(),
+                        posAPI.getDashboard(),
+                        posAPI.getTables(),
+                        posAPI.getStaff(),
+                        posAPI.getKitchen(),
+                        posAPI.getHeartbeat(),
                     ]);
 
                     const el = (id, val) => { const e = document.getElementById(id); if (e) e.innerHTML = val; };
 
                     if (dashboard) {
                         // Fetch all orders for total revenue
-                        const orders = await bilzoraAPI.getOrders(500);
+                        const orders = await posAPI.getOrders(500);
                         const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
                         const totalOrders = orders.length;
                         const avgOrder = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
@@ -701,7 +685,8 @@ function bindEvents() {
             const container = document.getElementById('liveOrdersContainer');
             if (container) container.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner"></div><div style="margin-top:8px;font-size:13px;color:var(--text-muted)">Fetching from Bilzora API...</div></div>';
             try {
-                const orders = await bilzoraAPI.getOrders(20);
+                const posAPI2 = getAPIFor(r?.apiUrl);
+                const orders = await posAPI2.getOrders(20);
                 if (orders && orders.length > 0) {
                     container.innerHTML = `
             <table class="dtable"><thead><tr><th>Order ID</th><th>Items</th><th>Type</th><th>Total</th><th>Payment</th><th>Time</th></tr></thead><tbody>
@@ -737,7 +722,8 @@ function bindEvents() {
                     invoicePrefix: document.getElementById('rcfgPrefix')?.value || '',
                     dailyGoal: document.getElementById('rcfgGoal')?.value || '50000',
                 };
-                await bilzoraAPI.updateSettings(data);
+                const posAPI3 = getAPIFor(r?.apiUrl);
+                await posAPI3.updateSettings(data);
                 toast('Configuration pushed to Bilzora POS!', 'success');
             } catch (e) {
                 toast('Failed to push config: ' + e.message, 'error');
@@ -929,7 +915,8 @@ function bindEvents() {
                 const btn = document.getElementById('rrcSave');
                 btn.disabled = true; btn.textContent = '⏳ Pushing...';
                 try {
-                    await bilzoraAPI.updateSettings({
+                    const posAPI4 = getAPIFor(r?.apiUrl);
+                    await posAPI4.updateSettings({
                         restaurantName: document.getElementById('rrcName')?.value,
                         gstRate: document.getElementById('rrcGst')?.value,
                         invoicePrefix: document.getElementById('rrcPrefix')?.value,
@@ -944,7 +931,8 @@ function bindEvents() {
             // Fetch from API
             document.getElementById('rrcFetch')?.addEventListener('click', async () => {
                 try {
-                    const settings = await bilzoraAPI.getSettings();
+                    const posAPI5 = getAPIFor(r?.apiUrl);
+                    const settings = await posAPI5.getSettings();
                     toast('Current config fetched from Bilzora API', 'success');
                     if (settings) {
                         if (settings.restaurantName) document.getElementById('rrcName').value = settings.restaurantName;
