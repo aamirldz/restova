@@ -74,7 +74,27 @@ const bilzoraAPI = {
         } catch (e) {
             return { ok: false, error: e.message };
         }
-    }
+    },
+    async getTables() {
+        try { const res = await fetch(`${BILZORA_API}/api/tables`); return res.json(); }
+        catch (e) { return []; }
+    },
+    async getStaff() {
+        try { const res = await fetch(`${BILZORA_API}/api/staff`); return res.json(); }
+        catch (e) { return []; }
+    },
+    async getKitchen() {
+        try { const res = await fetch(`${BILZORA_API}/api/kitchen`); return res.json(); }
+        catch (e) { return { stations: [], activeKOTs: 0, orders: [] }; }
+    },
+    async getHeartbeat() {
+        try { const res = await fetch(`${BILZORA_API}/api/heartbeat`); return res.json(); }
+        catch (e) { return { status: 'offline' }; }
+    },
+    async getDashboard() {
+        try { const res = await fetch(`${BILZORA_API}/api/dashboard`); return res.json(); }
+        catch (e) { return null; }
+    },
 };
 
 // ── TOAST NOTIFICATIONS ──
@@ -467,21 +487,128 @@ function bindEvents() {
         if (state._detailTab === 'overview' || !state._detailTab) {
             (async () => {
                 try {
-                    const orders = await bilzoraAPI.getOrders(500);
-                    const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
-                    const totalOrders = orders.length;
-                    const avgOrder = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-                    const lastOrderTime = orders.length > 0 ? Math.max(...orders.map(o => o.time || 0)) : 0;
-                    const lastSyncAgo = lastOrderTime > 0 ? timeAgo(Date.now() - lastOrderTime) : 'No data';
+                    // Fetch everything in parallel
+                    const [dashboard, tables, staff, kitchen, heartbeat] = await Promise.all([
+                        bilzoraAPI.getDashboard(),
+                        bilzoraAPI.getTables(),
+                        bilzoraAPI.getStaff(),
+                        bilzoraAPI.getKitchen(),
+                        bilzoraAPI.getHeartbeat(),
+                    ]);
 
-                    const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-                    el('kpiRevenue', formatCurrency(totalRevenue));
-                    el('kpiOrders', totalOrders.toLocaleString());
-                    el('kpiAvgOrder', formatCurrency(avgOrder));
-                    el('kpiLastSync', lastSyncAgo);
+                    const el = (id, val) => { const e = document.getElementById(id); if (e) e.innerHTML = val; };
 
-                    // Also update the restaurant data for card view
-                    if (r) { r.revenue = totalRevenue; r.orders = totalOrders; r.avgOrder = avgOrder; r.lastSync = lastOrderTime || Date.now(); }
+                    if (dashboard) {
+                        // Fetch all orders for total revenue
+                        const orders = await bilzoraAPI.getOrders(500);
+                        const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
+                        const totalOrders = orders.length;
+                        const avgOrder = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+
+                        el('kpiRevenue', formatCurrency(totalRevenue));
+                        el('kpiOrders', totalOrders.toLocaleString());
+                        el('kpiAvgOrder', formatCurrency(avgOrder));
+                        el('kpiLastSync', heartbeat.status === 'online' ? '🟢 Online' : '🔴 Offline');
+
+                        if (r) { r.revenue = totalRevenue; r.orders = totalOrders; r.avgOrder = avgOrder; r.lastSync = Date.now(); }
+                    }
+
+                    // Tables panel
+                    const tablesContainer = document.getElementById('liveTablesContainer');
+                    if (tablesContainer && Array.isArray(tables)) {
+                        const occupied = tables.filter(t => t.status !== 'available');
+                        tablesContainer.innerHTML = `
+                            <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                                <div class="kpi-card emerald" style="flex:1;min-width:100px"><div class="kpi-header"><span class="kpi-label">Total</span></div><div class="kpi-value">${tables.length}</div></div>
+                                <div class="kpi-card amber" style="flex:1;min-width:100px"><div class="kpi-header"><span class="kpi-label">Occupied</span></div><div class="kpi-value">${occupied.length}</div></div>
+                                <div class="kpi-card cyan" style="flex:1;min-width:100px"><div class="kpi-header"><span class="kpi-label">Available</span></div><div class="kpi-value">${tables.length - occupied.length}</div></div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(60px,1fr));gap:8px">
+                                ${tables.map(t => `<div style="padding:10px;text-align:center;border-radius:8px;font-weight:700;font-size:13px;
+                                    background:${t.status === 'available' ? 'var(--bg-2)' : t.status === 'occupied' ? '#FEF3C7' : t.status === 'bill-pending' ? '#FEE2E2' : '#DCFCE7'};
+                                    border:1px solid ${t.status === 'available' ? 'var(--border)' : t.status === 'occupied' ? '#F59E0B' : t.status === 'bill-pending' ? '#EF4444' : '#10B981'};
+                                    color:${t.status === 'available' ? 'var(--text-muted)' : '#1F2937'}">
+                                    T${t.id}${t.guests ? '<div style="font-size:10px;font-weight:400">👤' + t.guests + '</div>' : ''}
+                                </div>`).join('')}
+                            </div>`;
+                    }
+
+                    // Staff panel
+                    const staffContainer = document.getElementById('liveStaffContainer');
+                    if (staffContainer) {
+                        if (Array.isArray(staff) && staff.length > 0) {
+                            staffContainer.innerHTML = `
+                                <table class="dtable"><thead><tr><th>Name</th><th>Role</th><th>Phone</th></tr></thead><tbody>
+                                ${staff.map(s => `<tr><td style="font-weight:600">${s.name || '—'}</td><td><span class="badge ghost">${s.role || '—'}</span></td><td style="font-size:12px">${s.phone || '—'}</td></tr>`).join('')}
+                                </tbody></table>`;
+                        } else {
+                            staffContainer.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px 0">No staff registered in POS</div>';
+                        }
+                    }
+
+                    // Kitchen / KDS panel
+                    const kdsContainer = document.getElementById('liveKDSContainer');
+                    if (kdsContainer) {
+                        kdsContainer.innerHTML = `
+                            <div style="display:flex;gap:10px;margin-bottom:12px">
+                                <div class="badge ${kitchen.activeKOTs > 0 ? 'amber' : 'emerald'}" style="font-size:12px;padding:6px 12px">
+                                    🍳 ${kitchen.activeKOTs} Active KOTs
+                                </div>
+                                <div class="badge ghost" style="font-size:12px;padding:6px 12px">
+                                    ${kitchen.stations?.length || 0} Stations
+                                </div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+                                ${(kitchen.stations || []).map(st => `
+                                    <div style="padding:12px;background:var(--bg-2);border-radius:8px;border:1px solid var(--border)">
+                                        <div style="font-size:18px;margin-bottom:4px">${st.icon}</div>
+                                        <div style="font-weight:600;font-size:13px">${st.name}</div>
+                                        <div style="font-size:11px;color:var(--text-dim)">${st.categories.length} categories</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ${kitchen.orders?.length > 0 ? `<div style="margin-top:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px">Active Orders in Kitchen:</div>
+                                <table class="dtable"><thead><tr><th>Order</th><th>Type</th><th>Items</th><th>Total</th></tr></thead><tbody>
+                                ${kitchen.orders.slice(0, 10).map(o => `<tr>
+                                    <td style="font-family:var(--font-mono);font-size:12px">${o.id || '—'}</td>
+                                    <td><span class="badge ghost">${o.type || '—'}</span></td>
+                                    <td style="font-size:12px">${(o.items || []).map(i => i.name).join(', ') || '—'}</td>
+                                    <td style="font-weight:700">₹${(o.total || 0).toLocaleString()}</td>
+                                </tr>`).join('')}</tbody></table></div>` : ''}`;
+                    }
+
+                    // Heartbeat panel
+                    const heartbeatContainer = document.getElementById('liveHeartbeatContainer');
+                    if (heartbeatContainer) {
+                        heartbeatContainer.innerHTML = `
+                            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+                                <div style="padding:10px;background:var(--bg-2);border-radius:8px">
+                                    <div style="font-size:11px;color:var(--text-dim)">Status</div>
+                                    <div style="font-weight:700;color:${heartbeat.status === 'online' ? 'var(--emerald)' : 'var(--rose)'}">${heartbeat.status === 'online' ? '🟢 Online' : '🔴 Offline'}</div>
+                                </div>
+                                <div style="padding:10px;background:var(--bg-2);border-radius:8px">
+                                    <div style="font-size:11px;color:var(--text-dim)">POS Version</div>
+                                    <div style="font-weight:700">${heartbeat.posVersion || '—'}</div>
+                                </div>
+                                <div style="padding:10px;background:var(--bg-2);border-radius:8px">
+                                    <div style="font-size:11px;color:var(--text-dim)">Total Orders</div>
+                                    <div style="font-weight:700">${heartbeat.totalOrders || 0}</div>
+                                </div>
+                                <div style="padding:10px;background:var(--bg-2);border-radius:8px">
+                                    <div style="font-size:11px;color:var(--text-dim)">Active Orders</div>
+                                    <div style="font-weight:700">${heartbeat.activeOrders || 0}</div>
+                                </div>
+                                <div style="padding:10px;background:var(--bg-2);border-radius:8px">
+                                    <div style="font-size:11px;color:var(--text-dim)">DB Size</div>
+                                    <div style="font-weight:700">${heartbeat.dbSize || '—'}</div>
+                                </div>
+                                <div style="padding:10px;background:var(--bg-2);border-radius:8px">
+                                    <div style="font-size:11px;color:var(--text-dim)">Last Order</div>
+                                    <div style="font-weight:700;font-size:12px">${heartbeat.lastOrderAt ? new Date(heartbeat.lastOrderAt).toLocaleString('en-IN') : 'None'}</div>
+                                </div>
+                            </div>`;
+                    }
+
                 } catch (e) {
                     const el = (id, val) => { const e2 = document.getElementById(id); if (e2) e2.textContent = val; };
                     el('kpiRevenue', '—'); el('kpiOrders', '—'); el('kpiAvgOrder', '—'); el('kpiLastSync', 'Offline');

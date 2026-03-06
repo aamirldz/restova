@@ -286,6 +286,29 @@ function renderRestaurantDetail(state) {
         <button class="btn btn-primary btn-sm" style="margin-top:12px;width:100%" id="upgradePlanBtn">Upgrade Plan</button>
       </div>
     </div>
+
+    <!-- LIVE DATA FROM BILZORA POS -->
+    <div class="grid-2" style="margin-top:16px">
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px">🪑 Live Tables</div>
+        <div id="liveTablesContainer"><div style="text-align:center;padding:16px"><div class="spinner" style="width:20px;height:20px"></div><div style="font-size:12px;color:var(--text-dim);margin-top:6px">Loading tables from POS...</div></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px">👥 Staff (from POS)</div>
+        <div id="liveStaffContainer"><div style="text-align:center;padding:16px"><div class="spinner" style="width:20px;height:20px"></div><div style="font-size:12px;color:var(--text-dim);margin-top:6px">Loading staff from POS...</div></div></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px">
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px">🍳 Kitchen / KDS Status</div>
+        <div id="liveKDSContainer"><div style="text-align:center;padding:16px"><div class="spinner" style="width:20px;height:20px"></div><div style="font-size:12px;color:var(--text-dim);margin-top:6px">Loading KDS status...</div></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px">💓 Device Heartbeat</div>
+        <div id="liveHeartbeatContainer"><div style="text-align:center;padding:16px"><div class="spinner" style="width:20px;height:20px"></div><div style="font-size:12px;color:var(--text-dim);margin-top:6px">Pinging POS device...</div></div></div>
+      </div>
+    </div>
   ` : tab === 'devices' ? `
     <div class="panel">
       <div class="panel-header"><div class="panel-title">📟 Devices (${devs.length})</div><button class="btn btn-primary btn-sm" id="addDeviceBtn">+ Add Device</button></div>
