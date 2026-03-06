@@ -637,12 +637,15 @@ function bindEvents() {
                                 `).join('')}
                             </div>
                             ${kitchen.orders?.length > 0 ? `<div style="margin-top:12px"><div style="font-weight:600;font-size:13px;margin-bottom:8px">Active Orders in Kitchen:</div>
-                                <table class="dtable"><thead><tr><th>Order</th><th>Type</th><th>Items</th><th>Total</th></tr></thead><tbody>
+                                <table class="dtable"><thead><tr><th>KOT ID</th><th>Table</th><th>Type</th><th>Items</th><th>Time Waiting</th></tr></thead><tbody>
                                 ${kitchen.orders.slice(0, 10).map(o => `<tr>
-                                    <td style="font-family:var(--font-mono);font-size:12px">${o.id || '—'}</td>
-                                    <td><span class="badge ghost">${o.type || '—'}</span></td>
-                                    <td style="font-size:12px">${(o.items || []).map(i => i.name).join(', ') || '—'}</td>
-                                    <td style="font-weight:700">₹${(o.total || 0).toLocaleString()}</td>
+                                    <td style="font-family:var(--font-mono);font-size:12px;font-weight:600">${o.id || '—'}</td>
+                                    <td><span class="badge ${String(o.table).startsWith('T') ? 'indigo' : 'amber'}">${o.table || '—'}</span></td>
+                                    <td><span class="badge ghost">${o.type || 'DINE-IN'}</span></td>
+                                    <td style="font-size:12px;max-width:200px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap" title="${(o.items || []).map(i => `${i.qty}x ${i.name}`).join(', ')}">
+                                        ${(o.items || []).map(i => `<span style="color:${i.ready ? 'var(--ok)' : 'inherit'}">${i.qty}x ${i.name}</span>`).join(', ') || '—'}
+                                    </td>
+                                    <td style="color:var(--text-dim);font-size:12px">${o.startTime ? Math.floor((Date.now() - o.startTime) / 60000) + ' min' : 'just now'}</td>
                                 </tr>`).join('')}</tbody></table></div>` : ''}`;
                     }
 
